@@ -1,5 +1,35 @@
 #!/afs/cats.ucsc.edu/courses/cse112-wm/usr/smalltalk/bin/gst -f
-"$Id: mbint.st,v 1.8 2020-10-28 20:08:04-07 - - $"
+"$Id: mbint.st,v 1.10 2020-11-09 23:34:52-08 - - $"
+
+Object subclass: NumberStream [
+   |atEndFlag stream buffer|
+   NumberStream class >> new [
+      ^ super new init: stdin.
+   ]
+   NumberStream class >> new: aStream [
+      ^ super new init: aStream.
+   ]
+   init: aStream [
+      atEndFlag := false.
+      stream := aStream.
+      buffer := OrderedCollection new.
+   ]
+   atEnd [ ^ atEndFlag ]
+   nextNumber [
+      [atEndFlag] whileFalse: [
+         buffer size > 0 ifTrue: [
+            ^ buffer removeFirst asNumber asFloatD.
+         ].
+         stdout flush.
+         stderr flush.
+         stream atEnd "This condition fills the input buffer."
+            ifTrue: [atEndFlag := true]
+            ifFalse: [buffer := stream nextLine substrings: ' ']
+      ].
+      ^ 0.0 / 0.0 "NaN".
+   ]
+].
+
 
 Object subclass: Debug [
    level := 0. "multiple -d, -dd, -ddd options set debug level"
@@ -63,6 +93,7 @@ Expr subclass: UnopExpr [
    printOn: file [
       ^ file << self prefix << oper << ' ' << opnd << ')'.
    ]
+   value [^ opnd value perform: oper]
 ].
 
 Expr subclass: BinopExpr [
@@ -77,8 +108,11 @@ Expr subclass: BinopExpr [
       ^ file << self prefix << oper << ' ' << opnd1
              << ' ' << opnd2 << ')'.
    ]
+   value [^opnd1 value perform: oper with: opnd2 value]
 ].
 
+"The goal for evaluating an ArrayExpr is to get the name of the array"
+"then access the position of that array by evaluating the expression"
 Expr subclass: ArrayExpr [
    |arrayName|
    arrayDict := Dictionary new.
@@ -155,6 +189,7 @@ Stmt subclass: IfStmt [
 
 Stmt subclass: InputStmt [
    |inputVars|
+   stdinNumbers := NumberStream new.
    InputStmt class >> new: stmt [^ super new init: stmt]
    init: stmt [
       |args|
@@ -165,6 +200,14 @@ Stmt subclass: InputStmt [
       ]
    ]
    printOn: file [^ file << self prefix << inputVars << ')']
+   interp [
+      inputVars do: [:var|
+         |value|
+         value := stdinNumbers nextNumber.
+         stdout << thisContext method << ' '
+                << var << ': ' << value << nl.
+      ].
+   ]
 ].
 
 Stmt subclass: PrintStmt [
